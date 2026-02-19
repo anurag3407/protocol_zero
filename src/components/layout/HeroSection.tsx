@@ -118,7 +118,7 @@ export default function HeroSection() {
             href="#"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-neutral-700 bg-neutral-900/80 text-neutral-300 text-sm font-medium hover:bg-neutral-800/80 hover:border-neutral-600 transition-all backdrop-blur-sm"
           >
-            <span>AI-Powered Code Review for Every Push</span>
+            <span style={{ fontFamily: 'var(--font-jetbrains), monospace' }}>Catch Bugs Before Your Users Do</span>
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="9 18 15 12 9 6" />
             </svg>
@@ -130,24 +130,37 @@ export default function HeroSection() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="text-4xl md:text-6xl lg:text-7xl font-bold max-w-5xl mx-auto text-center relative z-20 py-6 bg-clip-text text-transparent bg-gradient-to-b from-neutral-100 via-white to-white"
+          className="text-4xl md:text-6xl lg:text-7xl font-bold max-w-5xl mx-auto text-center relative z-20 py-6 bg-clip-text text-transparent bg-gradient-to-b from-neutral-100 via-white to-white tracking-tight"
+          style={{ fontFamily: 'var(--font-syne), var(--font-space-grotesk), sans-serif' }}
         >
-          Ship Code at
+          Break Nothing.
           <br />
-          <Cover>Warp Speed </Cover>
+          <Cover>Build Fast.</Cover>
         </motion.h1>
+
+        {/* Subtitle */}
+        <motion.p
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
+          className="max-w-2xl mx-auto text-base md:text-lg text-zinc-400 leading-relaxed text-center"
+          style={{ fontFamily: 'var(--font-inter), sans-serif' }}
+        >
+          AI-powered code review that catches bugs, vulnerabilities, and performance
+          issues before they reach production. <span className="text-zinc-200" style={{ fontFamily: 'var(--font-jetbrains), monospace' }}>Ship confidently.</span>
+        </motion.p>
 
         {/* CTA Buttons - Minimal Dark Design */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-8"
+          className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-10"
         >
           {/* Get Started - Primary Minimal Button */}
           <Link
             href="/sign-up"
-            className="group inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-white text-black font-medium text-sm transition-all duration-200 hover:bg-zinc-200"
+            className="group inline-flex items-center gap-2.5 px-7 py-3.5 rounded-full bg-white text-black font-semibold text-sm transition-all duration-300 hover:bg-zinc-100 hover:shadow-[0_0_30px_rgba(255,255,255,0.15)]"
           >
             <span>Get Started</span>
             <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-0.5" />
@@ -156,7 +169,7 @@ export default function HeroSection() {
           {/* How to Start - Secondary Minimal Button */}
           <Link
             href="#how-to-start"
-            className="group inline-flex items-center gap-2 px-6 py-3 rounded-lg border border-zinc-800 text-zinc-300 font-medium text-sm transition-all duration-200 hover:border-zinc-600 hover:text-white hover:bg-zinc-900/50"
+            className="group inline-flex items-center gap-2.5 px-7 py-3.5 rounded-full border border-zinc-700/50 text-zinc-300 font-semibold text-sm transition-all duration-300 hover:border-zinc-500 hover:text-white hover:bg-white/5"
           >
             <Play className="w-4 h-4 transition-transform duration-200 group-hover:scale-110" />
             <span>How to Start</span>

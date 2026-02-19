@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Space_Grotesk, Syne, JetBrains_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { Toaster } from "sonner";
@@ -12,15 +12,33 @@ const inter = Inter({
   display: 'swap',
 });
 
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
+  subsets: ["latin"],
+  display: 'swap',
+});
+
+const syne = Syne({
+  variable: "--font-syne",
+  subsets: ["latin"],
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains",
+  subsets: ["latin"],
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
   title: "Protocol Zero - AI-Powered Code Police",
   description: "AI-powered code review agent. Automated security scanning, performance analysis, and auto-fix PRs for your GitHub repositories.",
   keywords: ["code review", "AI agent", "code police", "security scanning", "auto-fix", "GitHub"],
   authors: [{ name: "Protocol Zero Team" }],
   icons: {
-    icon: "/ghostfounder.png",
-    shortcut: "/ghostfounder.png",
-    apple: "/ghostfounder.png",
+    icon: "/zero.png",
+    shortcut: "/zero.png",
+    apple: "/zero.png",
   },
   openGraph: {
     title: "Protocol Zero - AI-Powered Code Police",
@@ -63,7 +81,7 @@ export default function RootLayout({
       }}
     >
       <html lang="en" suppressHydrationWarning className="dark" data-scroll-behavior="smooth">
-        <body className={`${inter.variable} font-sans antialiased bg-black text-white`}>
+        <body className={`${inter.variable} ${spaceGrotesk.variable} ${syne.variable} ${jetbrainsMono.variable} font-sans antialiased bg-black text-white`}>
           <Providers>
             {children}
           </Providers>
