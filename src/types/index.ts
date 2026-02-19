@@ -254,6 +254,10 @@ export interface HealingSession {
   repoOwner: string;
   repoName: string;
   branchName: string;
+  /** The branch to heal against (default: "main") */
+  targetBranch: string;
+  /** Optional custom rules/instructions for the AI agent */
+  customRules?: string;
   status: HealingStatus;
   currentAttempt: number;
   maxAttempts: number;

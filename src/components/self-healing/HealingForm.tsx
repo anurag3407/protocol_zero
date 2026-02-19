@@ -8,10 +8,10 @@
  */
 
 import { useState, useMemo } from "react";
-import { GitBranch, Loader2, Zap, Users, User } from "lucide-react";
+import { GitBranch, Loader2, Zap, Users, User, ChevronDown, ChevronUp, ScrollText } from "lucide-react";
 
 interface HealingFormProps {
-    onSubmit: (repoUrl: string, teamName: string, leaderName: string) => Promise<void>;
+    onSubmit: (repoUrl: string, teamName: string, leaderName: string, targetBranch: string, customRules?: string) => Promise<void>;
     isLoading: boolean;
 }
 
@@ -19,6 +19,9 @@ export function HealingForm({ onSubmit, isLoading }: HealingFormProps) {
     const [repoUrl, setRepoUrl] = useState("");
     const [teamName, setTeamName] = useState("");
     const [leaderName, setLeaderName] = useState("");
+    const [targetBranch, setTargetBranch] = useState("main");
+    const [customRules, setCustomRules] = useState("");
+    const [showAdvanced, setShowAdvanced] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const validateUrl = (url: string): boolean => {
@@ -59,7 +62,13 @@ export function HealingForm({ onSubmit, isLoading }: HealingFormProps) {
         }
 
         try {
-            await onSubmit(repoUrl.trim(), teamName.trim(), leaderName.trim());
+            await onSubmit(
+                repoUrl.trim(),
+                teamName.trim(),
+                leaderName.trim(),
+                targetBranch.trim() || "main",
+                customRules.trim() || undefined,
+            );
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to start healing");
         }
@@ -140,14 +149,66 @@ export function HealingForm({ onSubmit, isLoading }: HealingFormProps) {
                         </div>
                     </div>
 
+                    {/* Target Branch */}
+                    <div>
+                        <label className="flex items-center gap-1.5 text-xs font-medium text-zinc-400 mb-1.5">
+                            <GitBranch className="w-3 h-3" /> Target Branch
+                        </label>
+                        <input
+                            type="text"
+                            value={targetBranch}
+                            onChange={(e) => { setTargetBranch(e.target.value); setError(null); }}
+                            placeholder="main"
+                            className="w-full px-4 py-3 bg-neutral-950/60 border border-white/10 rounded-xl text-zinc-200 placeholder-zinc-600 
+                               focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500/50
+                               transition-all duration-200 text-sm font-mono"
+                            disabled={isLoading}
+                            id="target-branch-input"
+                        />
+                        <p className="text-[10px] text-zinc-600 mt-1">The branch to clone and run tests against. Defaults to <code className="text-zinc-500">main</code>.</p>
+                    </div>
+
                     {/* Branch name preview */}
                     {branchPreview && (
                         <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/5 border border-emerald-500/10 rounded-lg">
                             <GitBranch className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
                             <span className="text-xs text-zinc-500">Branch:</span>
                             <code className="text-xs text-emerald-300 font-mono">{branchPreview}</code>
+                            <span className="text-zinc-600 text-[10px]">← from <code className="text-zinc-500">{targetBranch || "main"}</code></span>
                         </div>
                     )}
+
+                    {/* Advanced: Custom Rules (collapsible) */}
+                    <div className="border border-white/5 rounded-xl overflow-hidden">
+                        <button
+                            type="button"
+                            onClick={() => setShowAdvanced(!showAdvanced)}
+                            className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-zinc-400 hover:text-zinc-300 bg-neutral-950/40 hover:bg-neutral-950/60 transition-colors duration-200"
+                        >
+                            <span className="flex items-center gap-2">
+                                <ScrollText className="w-3.5 h-3.5" />
+                                Custom Rules for AI Agent
+                                <span className="text-[10px] text-zinc-600 font-normal">(optional)</span>
+                            </span>
+                            {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        </button>
+                        {showAdvanced && (
+                            <div className="px-4 pb-4 pt-2 bg-neutral-950/20">
+                                <textarea
+                                    value={customRules}
+                                    onChange={(e) => setCustomRules(e.target.value)}
+                                    placeholder={`e.g.\n- Do not remove any console.log statements\n- Prefer async/await over .then() chains\n- All functions must have docstrings\n- Ignore styling issues, focus only on logic bugs`}
+                                    rows={4}
+                                    className="w-full px-3 py-2.5 bg-neutral-950/60 border border-white/10 rounded-lg text-zinc-200 placeholder-zinc-600 
+                                       focus:outline-none focus:ring-2 focus:ring-violet-500/30 focus:border-violet-500/50
+                                       transition-all duration-200 text-xs font-mono resize-y min-h-[80px]"
+                                    disabled={isLoading}
+                                    id="custom-rules-input"
+                                />
+                                <p className="text-[10px] text-zinc-600 mt-1.5">These instructions will guide the AI scanner and fix engineer. Leave empty for default behavior.</p>
+                            </div>
+                        )}
+                    </div>
 
                     {/* Submit button */}
                     <button

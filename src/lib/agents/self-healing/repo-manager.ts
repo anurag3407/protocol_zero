@@ -214,12 +214,14 @@ async function waitForFork(
 /**
  * Clone a repository into the sandbox.
  * Clones the FORK (bot has write access to it).
+ * If targetBranch is provided, clones that specific branch instead of the default.
  */
 export async function cloneRepo(
     repoUrl: string,
     sessionId: string,
     forkOwner?: string,
     forkRepoName?: string,
+    targetBranch?: string,
 ): Promise<string> {
     const sandboxDir = getSandboxDir(sessionId);
 
@@ -244,8 +246,13 @@ export async function cloneRepo(
         console.log(`[RepoManager] Cloning original (with auth): ${owner}/${repo}`);
     }
 
+    // Build clone command — use --branch to target a specific branch, otherwise shallow clone default
+    const branchFlag = targetBranch && targetBranch !== "main" ? `--branch ${targetBranch}` : "";
+    const cloneCmd = `git clone --depth=1 ${branchFlag} "${cloneTarget}" "${sandboxDir}"`;
+    console.log(`[RepoManager] Clone command: git clone --depth=1 ${branchFlag ? `--branch ${targetBranch}` : "(default branch)"}`);
+
     try {
-        execSync(`git clone --depth=1 "${cloneTarget}" "${sandboxDir}"`, {
+        execSync(cloneCmd, {
             timeout: 60000,
             stdio: "pipe",
         });

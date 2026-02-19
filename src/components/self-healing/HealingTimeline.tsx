@@ -97,7 +97,7 @@ export function HealingTimeline({
                                                     ? "text-red-400 bg-red-500/10"
                                                     : "text-yellow-400 bg-yellow-500/10"
                                             }`}>
-                                            {attempt.status === "passed" ? "TESTS PASSED" : attempt.status === "failed" ? "TESTS FAILED" : "IN PROGRESS"}
+                                            {attempt.status === "passed" ? "TESTS PASSED" : attempt.status === "failed" ? "FIXING ISSUES" : "IN PROGRESS"}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-1 text-xs text-zinc-500">

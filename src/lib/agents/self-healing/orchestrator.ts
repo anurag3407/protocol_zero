@@ -82,6 +82,10 @@ export interface OrchestratorInput {
     userId: string;
     teamName: string;
     leaderName: string;
+    /** Branch to clone and heal against (default: "main") */
+    targetBranch?: string;
+    /** Optional custom rules/instructions for the AI agent */
+    customRules?: string;
 }
 
 /**
@@ -89,7 +93,7 @@ export interface OrchestratorInput {
  * This function runs asynchronously and streams events via the progress emitter
  */
 export async function runHealingLoop(input: OrchestratorInput): Promise<void> {
-    const { sessionId, repoUrl, teamName, leaderName } = input;
+    const { sessionId, repoUrl, teamName, leaderName, targetBranch = "main", customRules } = input;
     const startTime = Date.now();
 
     // Initialize session emitter
@@ -115,12 +119,71 @@ export async function runHealingLoop(input: OrchestratorInput): Promise<void> {
     let branchName = "";
     let forkOwner = "";
 
+    // Pending attestations — queued after each fix, flushed after the NEXT test run
+    // so we can record the real testAfterPassed value on-chain
+    interface PendingAttestation {
+        bugCategory: string;
+        filePath: string;
+        line: number;
+        errorMessage: string;
+        fixDescription: string;
+        commitSha: string;
+    }
+    let pendingAttestations: PendingAttestation[] = [];
+
+    /** Flush pending attestations to blockchain with the now-known test result */
+    async function flushAttestations(testAfterPassed: boolean): Promise<void> {
+        if (!isAttestationEnabled() || pendingAttestations.length === 0) return;
+
+        const toFlush = [...pendingAttestations];
+        pendingAttestations = [];
+
+        emitLog(sessionId, `⛓️ Recording ${toFlush.length} fix(es) on-chain (tests ${testAfterPassed ? 'passed ✅' : 'pending ⏳'})...`);
+
+        const promises = toFlush.map((a) =>
+            recordFixAttestation({
+                sessionId,
+                bugCategory: a.bugCategory,
+                filePath: a.filePath,
+                line: a.line,
+                errorMessage: a.errorMessage,
+                fixDescription: a.fixDescription,
+                testBeforePassed: false,
+                testAfterPassed,
+                commitSha: a.commitSha,
+            }).catch((err) => {
+                console.warn(`[Attestation] Non-blocking failure:`, err);
+                return { success: false, error: String(err) } as { success: boolean; error: string };
+            })
+        );
+
+        try {
+            const results = await Promise.all(promises);
+            const succeeded = results.filter((r) => r.success).length;
+            const failed = results.length - succeeded;
+            if (succeeded > 0) {
+                const successResults = results.filter((r) => r.success && 'etherscanUrl' in r);
+                const firstUrl = successResults.length > 0 ? (successResults[0] as { etherscanUrl?: string }).etherscanUrl : undefined;
+                emitLog(sessionId, `⛓️ ${succeeded} attestation(s) recorded on-chain${firstUrl ? `: ${firstUrl}` : ''}`);
+            }
+            if (failed > 0) {
+                emitLog(sessionId, `⚠️ ${failed} attestation(s) failed (non-blocking)`);
+            }
+        } catch {
+            emitLog(sessionId, `⚠️ Attestation batch error (non-blocking)`);
+        }
+    }
+
     try {
         // ================================================================
         // PHASE 0: FORK → CLONE FORK → CREATE BRANCH ON FORK
         // ================================================================
         emitLog(sessionId, `Starting self-healing for ${repoUrl}`);
         emitLog(sessionId, `Team: ${teamName} | Leader: ${leaderName}`);
+        emitLog(sessionId, `Target branch: ${targetBranch}`);
+        if (customRules) {
+            emitLog(sessionId, `Custom rules: ${customRules.slice(0, 120)}${customRules.length > 120 ? '...' : ''}`);
+        }
 
         // Step 1: Fork the repo under the bot account
         await updateSessionStatus(sessionId, "cloning");
@@ -146,8 +209,8 @@ export async function runHealingLoop(input: OrchestratorInput): Promise<void> {
         // Step 2: Clone the FORK (bot has write access to its own fork)
         emitStatus(sessionId, "cloning", `Cloning fork ${forkOwner}/${forkResult.forkRepo}...`);
 
-        repoDir = await cloneRepo(repoUrl, sessionId, forkOwner, forkResult.forkRepo);
-        emitLog(sessionId, `✅ Fork cloned successfully`);
+        repoDir = await cloneRepo(repoUrl, sessionId, forkOwner, forkResult.forkRepo, targetBranch);
+        emitLog(sessionId, `✅ Fork cloned successfully (branch: ${targetBranch})`);
 
         // Step 3: Create branch locally with team/leader name
         branchName = getHealingBranchName(teamName, leaderName);
@@ -204,6 +267,12 @@ export async function runHealingLoop(input: OrchestratorInput): Promise<void> {
 
             const testResult = runTests(repoDir, true);
 
+            // Flush any pending attestations from the PREVIOUS attempt
+            // Now we know whether the previous fixes made tests pass
+            if (pendingAttestations.length > 0) {
+                await flushAttestations(testResult.passed);
+            }
+
             emitTestResult(sessionId, {
                 passed: testResult.passed,
                 output: testResult.fullOutput.slice(0, 2000),
@@ -257,7 +326,11 @@ export async function runHealingLoop(input: OrchestratorInput): Promise<void> {
             }
 
             // Tests failed — scan for bugs
-            emitLog(sessionId, `❌ Tests failed. ${testResult.errors.length} errors detected.`);
+            if (testResult.errors.length > 0) {
+                emitLog(sessionId, `❌ Tests failed with ${testResult.errors.length} parsed error(s). Running AI scanner...`);
+            } else {
+                emitLog(sessionId, `⚠️ Tests exited with code ${testResult.exitCode}. AI scanner will deep-analyze source code...`);
+            }
 
             // Check timeout before AI scan
             if (isTimedOut(startTime)) {
@@ -291,7 +364,8 @@ export async function runHealingLoop(input: OrchestratorInput): Promise<void> {
                         });
                     },
                     onLog: (msg) => emitLog(sessionId, msg),
-                }
+                },
+                customRules,
             );
 
             // Filter out bugs that were already fixed in previous attempts
@@ -408,7 +482,8 @@ export async function runHealingLoop(input: OrchestratorInput): Promise<void> {
                         });
                     },
                     onLog: (msg) => emitLog(sessionId, msg),
-                }
+                },
+                customRules,
             );
 
             // Mark bugs as fixed (fix events already emitted via callback)
@@ -450,7 +525,24 @@ export async function runHealingLoop(input: OrchestratorInput): Promise<void> {
                     emitLog(sessionId, `ℹ️  The bot token may not have write access to this repo. Forking is required for repos you don't own.`);
                 }
 
-                // Attestations are recorded after the loop to avoid slowing down iterations
+                // Queue attestations — they'll be flushed after the NEXT test run
+                // so testAfterPassed reflects the real outcome
+                if (isAttestationEnabled()) {
+                    const fixedBugs = allBugs.filter((b) => b.fixed && b.fixedAtAttempt === attempt);
+                    for (const bug of fixedBugs) {
+                        pendingAttestations.push({
+                            bugCategory: bug.category,
+                            filePath: bug.filePath,
+                            line: bug.line,
+                            errorMessage: bug.message.slice(0, 500),
+                            fixDescription: `Fixed ${bug.category} error at line ${bug.line}`,
+                            commitSha: commitSha,
+                        });
+                    }
+                    if (fixedBugs.length > 0) {
+                        emitLog(sessionId, `⛓️ ${fixedBugs.length} fix(es) queued for on-chain recording (after next test)`);
+                    }
+                }
             } else {
                 emitLog(sessionId, `⚠️ No file changes to commit`);
             }
@@ -491,6 +583,11 @@ export async function runHealingLoop(input: OrchestratorInput): Promise<void> {
         emitStatus(sessionId, "testing", `Running final test suite...`);
 
         const finalTest = runTests(repoDir, true);
+
+        // Flush any remaining pending attestations from the last attempt
+        if (pendingAttestations.length > 0) {
+            await flushAttestations(finalTest.passed);
+        }
 
         const totalCommits = getCommitCount(repoDir, branchName);
         const elapsedSec = (Date.now() - startTime) / 1000;
@@ -580,7 +677,7 @@ async function attemptCreatePR(
     attempts: number,
     score: number,
 ): Promise<void> {
-    emitLog(sessionId, `📝 Creating cross-fork PR: ${forkOwner}:${branchName} → ${repoOwner}/${repoName}:main...`);
+    emitLog(sessionId, `📝 Creating cross-fork PR: ${forkOwner}:${branchName} → ${repoOwner}/${repoName}...`);
 
     const prResult = await createPullRequest(
         repoDir, repoOwner, repoName, branchName, forkOwner,
