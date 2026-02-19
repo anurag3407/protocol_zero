@@ -164,7 +164,7 @@ export function installDependencies(repoDir: string, installCommand: string): vo
     try {
         execSync(installCommand, {
             cwd: repoDir,
-            timeout: 180000, // 3 min timeout for install
+            timeout: 90000, // 90s timeout for install
             stdio: "pipe",
             env: { ...process.env, CI: "true" },
         });
@@ -179,13 +179,13 @@ export function installDependencies(repoDir: string, installCommand: string): vo
 /**
  * Run tests and capture results
  */
-export function runTests(repoDir: string): TestResult {
+export function runTests(repoDir: string, skipInstall: boolean = false): TestResult {
     const testCmd = detectTestCommand(repoDir);
     console.log(`[TestRunner] Detected framework: ${testCmd.framework}`);
     console.log(`[TestRunner] Running: ${testCmd.command}`);
 
-    // Install deps if needed
-    if (testCmd.installCommand) {
+    // Install deps if needed (skipped when orchestrator already installed once)
+    if (!skipInstall && testCmd.installCommand) {
         installDependencies(repoDir, testCmd.installCommand);
     }
 
@@ -194,7 +194,7 @@ export function runTests(repoDir: string): TestResult {
     try {
         const output = execSync(testCmd.command, {
             cwd: repoDir,
-            timeout: 300000, // 5 min timeout
+            timeout: 120000, // 2 min timeout
             stdio: "pipe",
             env: {
                 ...process.env,
