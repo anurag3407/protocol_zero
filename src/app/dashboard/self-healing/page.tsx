@@ -68,13 +68,13 @@ export default function SelfHealingPage() {
     }
   }, [isSignedIn, fetchSessions]);
 
-  const handleSubmit = async (repoUrl: string) => {
+  const handleSubmit = async (repoUrl: string, teamName: string, leaderName: string) => {
     setSubmitting(true);
     try {
       const res = await fetch("/api/self-healing/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repoUrl }),
+        body: JSON.stringify({ repoUrl, teamName, leaderName }),
       });
 
       const data = await res.json();
@@ -104,16 +104,16 @@ export default function SelfHealingPage() {
   const avgScore =
     sessions.filter((s) => s.score).length > 0
       ? Math.round(
-          sessions
-            .filter((s) => s.score)
-            .reduce((sum, s) => sum + (s.score?.finalScore || 0), 0) /
-            sessions.filter((s) => s.score).length,
-        )
+        sessions
+          .filter((s) => s.score)
+          .reduce((sum, s) => sum + (s.score?.finalScore || 0), 0) /
+        sessions.filter((s) => s.score).length,
+      )
       : 0;
 
   // Detect any active (in-progress) session
   const activeSession = sessions.find(
-    (s) => !["completed", "failed"].includes(s.status),
+    (s) => !["completed", "failed", "partial_success"].includes(s.status),
   );
 
   // Poll for session updates while there's an active session

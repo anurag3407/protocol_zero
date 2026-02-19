@@ -160,17 +160,42 @@ export function detectTestCommand(repoDir: string): TestCommand {
  * Install dependencies before running tests
  */
 export function installDependencies(repoDir: string, installCommand: string): void {
-    console.log(`[TestRunner] Installing dependencies: ${installCommand}`);
+    // Use npm ci (faster) when lockfile exists, otherwise fall back to npm install
+    let cmd = installCommand;
+    if (installCommand === "npm install") {
+        const lockfilePath = path.join(repoDir, "package-lock.json");
+        if (existsSync(lockfilePath)) {
+            cmd = "npm ci";
+        }
+    }
+
+    console.log(`[TestRunner] Installing dependencies: ${cmd}`);
     try {
-        execSync(installCommand, {
+        execSync(cmd, {
             cwd: repoDir,
-            timeout: 90000, // 90s timeout for install
+            timeout: 60000, // 60s timeout
             stdio: "pipe",
             env: { ...process.env, CI: "true" },
         });
         console.log(`[TestRunner] ✅ Dependencies installed`);
     } catch (error) {
         const err = error as Error & { stderr?: Buffer };
+        // If npm ci fails, fall back to npm install
+        if (cmd === "npm ci") {
+            console.warn(`[TestRunner] npm ci failed, falling back to npm install`);
+            try {
+                execSync("npm install", {
+                    cwd: repoDir,
+                    timeout: 60000,
+                    stdio: "pipe",
+                    env: { ...process.env, CI: "true" },
+                });
+                console.log(`[TestRunner] ✅ Dependencies installed (fallback)`);
+                return;
+            } catch {
+                // Continue to warning below
+            }
+        }
         console.warn(`[TestRunner] ⚠️ Install warning: ${err.stderr?.toString()?.slice(0, 200) || err.message}`);
         // Don't throw — sometimes install has warnings but tests still work
     }

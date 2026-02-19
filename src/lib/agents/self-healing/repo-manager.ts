@@ -2,20 +2,16 @@
  * ============================================================================
  * SELF-HEALING AGENT - REPO MANAGER (FORK-BASED WITH FALLBACK)
  * ============================================================================
- * Handles all Git operations with flexible fork-based approach:
+ * Handles all Git operations — pushes directly to the target repo:
  * 
- * 1. Attempt to fork the target repo under the bot account
- * 2. If fork succeeds: Clone the FORK (bot has full write access)
- * 3. If fork fails: Work directly with original repo (requires write access)
- * 4. Create branch, fix bugs, commit with [AI-AGENT] prefix
- * 5. Push to fork or original repo
- * 6. Create PR: bot-fork → original repo OR branch → original repo
+ * 1. Clone the target repo (with bot token for auth)
+ * 2. Create branch via GitHub API on the target repo
+ * 3. Fix bugs, commit with [AI-AGENT] prefix
+ * 4. Push directly to the target repo
+ * 5. Create PR: branch → default branch (same-repo PR)
  * 
- * This allows creating PRs on ANY public repo, with graceful fallback
- * when forking isn't available.
- * 
- * Requires: GITHUB_BOT_TOKEN in .env (one-time developer setup)
- * Recommended Scopes: 'public_repo' (for forking) or 'repo' (for direct access)
+ * Requires: GITHUB_BOT_TOKEN in .env with write access to target repos.
+ * Recommended Scopes: 'repo' (for full repository access)
  */
 
 import { execSync } from "child_process";
@@ -27,8 +23,6 @@ import path from "path";
 // ============================================================================
 
 const SANDBOX_BASE = "/tmp/self-healing";
-const TEAM_NAME = "TECH_CHAOS";
-const LEADER_NAME = "ANURAG_MISHRA";
 const BRANCH_SUFFIX = "AI_Fix";
 const COMMIT_PREFIX = "[AI-AGENT]";
 
@@ -40,19 +34,45 @@ export function getBotToken(): string {
     if (!token) {
         throw new Error(
             "GITHUB_BOT_TOKEN is not set. Add it to your .env file. " +
-            "Create a token at: GitHub → Settings → Developer settings → Personal Access Tokens (classic). " +
-            "Required scopes: 'public_repo' (for forking) or 'repo' (for full repository access)."
+            "Create a classic PAT at: GitHub → Settings → Developer settings → Personal Access Tokens. " +
+            "Required scopes: 'repo' for full repository access."
         );
     }
     return token;
 }
 
 /**
+ * Get the authenticated bot's GitHub username
+ */
+export async function getBotUsername(): Promise<string> {
+    const token = getBotToken();
+    try {
+        const response = await fetch("https://api.github.com/user", {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: "application/vnd.github.v3+json",
+            },
+        });
+        if (response.ok) {
+            const data = await response.json();
+            return data.login;
+        }
+    } catch {
+        // Ignore
+    }
+    return "unknown";
+}
+
+/**
  * Get the standard branch name per RIFT 2026 convention
  * Rules: All UPPERCASE, underscores only, ends with _AI_Fix
+ * @param teamName - e.g. "TECH CHAOS" → "TECH_CHAOS"
+ * @param leaderName - e.g. "Anurag Mishra" → "ANURAG_MISHRA"
  */
-export function getHealingBranchName(): string {
-    return `${TEAM_NAME}_${LEADER_NAME}_${BRANCH_SUFFIX}`;
+export function getHealingBranchName(teamName: string, leaderName: string): string {
+    const team = teamName.toUpperCase().replace(/\s+/g, "_").replace(/[^A-Z0-9_]/g, "");
+    const leader = leaderName.toUpperCase().replace(/\s+/g, "_").replace(/[^A-Z0-9_]/g, "");
+    return `${team}_${leader}_${BRANCH_SUFFIX}`;
 }
 
 /**
@@ -85,64 +105,74 @@ export async function forkRepo(
     const token = getBotToken();
     console.log(`[RepoManager] Forking ${owner}/${repo}...`);
 
-    try {
-        const response = await fetch(
-            `https://api.github.com/repos/${owner}/${repo}/forks`,
-            {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    Accept: "application/vnd.github.v3+json",
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ default_branch_only: false }),
-            }
-        );
+    // Retry fork up to 2 times (GitHub API can be flaky)
+    const maxForkAttempts = 2;
+    for (let forkAttempt = 1; forkAttempt <= maxForkAttempts; forkAttempt++) {
+        try {
+            const response = await fetch(
+                `https://api.github.com/repos/${owner}/${repo}/forks`,
+                {
+                    method: "POST",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/vnd.github.v3+json",
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ default_branch_only: false }),
+                }
+            );
 
-        if (!response.ok && response.status !== 202) {
-            const errorData = await response.json().catch(() => ({}));
-            const errorMsg = errorData.message || response.statusText;
+            if (!response.ok && response.status !== 202) {
+                const errorData = await response.json().catch(() => ({}));
+                const errorMsg = errorData.message || response.statusText;
 
-            // Provide helpful context for common errors
-            if (response.status === 403) {
+                // Provide helpful context for common errors
+                if (response.status === 403) {
+                    throw new Error(
+                        `Fork failed (403): ${errorMsg}. ` +
+                        `GitHub token may lack 'public_repo' or 'repo' scope. ` +
+                        `Go to GitHub Settings → Developer settings → Personal Access Tokens to update.`
+                    );
+                }
+
                 throw new Error(
-                    `Fork failed (403): ${errorMsg}. ` +
-                    `GitHub token may lack 'public_repo' or 'repo' scope. ` +
-                    `Go to GitHub Settings → Developer settings → Personal Access Tokens to update.`
+                    `Fork failed (${response.status}): ${errorMsg}`
                 );
             }
 
-            throw new Error(
-                `Fork failed (${response.status}): ${errorMsg}`
-            );
+            const forkData = await response.json();
+            const forkOwner = forkData.owner?.login || forkData.full_name?.split("/")[0];
+            const forkRepoName = forkData.name || repo;
+
+            console.log(`[RepoManager] ✅ Fork created/found: ${forkOwner}/${forkRepoName}`);
+
+            // Wait for fork to be ready (GitHub creates forks asynchronously)
+            await waitForFork(forkOwner, forkRepoName, token);
+
+            return {
+                forkOwner,
+                forkRepo: forkRepoName,
+                forkUrl: `https://github.com/${forkOwner}/${forkRepoName}`,
+                success: true,
+            };
+        } catch (error) {
+            const err = error as Error;
+            if (forkAttempt < maxForkAttempts) {
+                console.warn(`[RepoManager] Fork attempt ${forkAttempt} failed: ${err.message}. Retrying in 3s...`);
+                await new Promise((r) => setTimeout(r, 3000));
+                continue;
+            }
+            console.error(`[RepoManager] Fork failed after ${maxForkAttempts} attempts:`, err.message);
+            return {
+                forkOwner: "",
+                forkRepo: "",
+                forkUrl: "",
+                success: false,
+                error: err.message,
+            };
         }
-
-        const forkData = await response.json();
-        const forkOwner = forkData.owner?.login || forkData.full_name?.split("/")[0];
-        const forkRepoName = forkData.name || repo;
-
-        console.log(`[RepoManager] ✅ Fork created/found: ${forkOwner}/${forkRepoName}`);
-
-        // Wait for fork to be ready (GitHub creates forks asynchronously)
-        await waitForFork(forkOwner, forkRepoName, token);
-
-        return {
-            forkOwner,
-            forkRepo: forkRepoName,
-            forkUrl: `https://github.com/${forkOwner}/${forkRepoName}`,
-            success: true,
-        };
-    } catch (error) {
-        const err = error as Error;
-        console.error(`[RepoManager] Fork failed:`, err.message);
-        return {
-            forkOwner: "",
-            forkRepo: "",
-            forkUrl: "",
-            success: false,
-            error: err.message,
-        };
     }
+    return { forkOwner: "", forkRepo: "", forkUrl: "", success: false, error: "Fork failed" };
 }
 
 /**
@@ -152,7 +182,7 @@ async function waitForFork(
     owner: string,
     repo: string,
     token: string,
-    maxWaitMs: number = 10000
+    maxWaitMs: number = 15000
 ): Promise<void> {
     const startTime = Date.now();
     const interval = 1000;
@@ -245,8 +275,7 @@ export async function cloneRepo(
 /**
  * Create and checkout the healing branch
  */
-export function createBranch(repoDir: string): string {
-    const branchName = getHealingBranchName();
+export function createBranch(repoDir: string, branchName: string): string {
     console.log(`[RepoManager] Creating branch: ${branchName}`);
 
     try {
@@ -262,6 +291,112 @@ export function createBranch(repoDir: string): string {
     } catch (error) {
         const err = error as Error;
         throw new Error(`Failed to create branch: ${err.message}`);
+    }
+}
+
+/**
+ * Create branch on GitHub via REST API (bypasses git push auth issues).
+ * Works by getting the HEAD SHA of the default branch and creating a new ref.
+ */
+export async function createBranchViaApi(
+    owner: string,
+    repo: string,
+    branchName: string,
+): Promise<{ success: boolean; error?: string }> {
+    const token = getBotToken();
+    console.log(`[RepoManager] Creating branch via API: ${owner}/${repo}:${branchName}`);
+
+    try {
+        // Step 1: Get the default branch's HEAD SHA
+        const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: "application/vnd.github.v3+json",
+            },
+        });
+        if (!repoRes.ok) {
+            return { success: false, error: `Failed to get repo info: ${repoRes.status}` };
+        }
+        const repoData = await repoRes.json();
+        const defaultBranch = repoData.default_branch || "main";
+
+        // Step 2: Get the SHA of the default branch
+        const refRes = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${defaultBranch}`,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    Accept: "application/vnd.github.v3+json",
+                },
+            }
+        );
+        if (!refRes.ok) {
+            return { success: false, error: `Failed to get ref for ${defaultBranch}: ${refRes.status}` };
+        }
+        const refData = await refRes.json();
+        const sha = refData.object.sha;
+
+        // Step 3: Check if the branch already exists
+        const existingRef = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/git/ref/heads/${branchName}`,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    Accept: "application/vnd.github.v3+json",
+                },
+            }
+        );
+
+        if (existingRef.ok) {
+            // Branch already exists — update it to point to latest SHA
+            const updateRes = await fetch(
+                `https://api.github.com/repos/${owner}/${repo}/git/refs/heads/${branchName}`,
+                {
+                    method: "PATCH",
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        Accept: "application/vnd.github.v3+json",
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ sha, force: true }),
+                }
+            );
+            if (!updateRes.ok) {
+                const errData = await updateRes.json().catch(() => ({}));
+                return { success: false, error: `Failed to update branch: ${errData.message || updateRes.status}` };
+            }
+            console.log(`[RepoManager] ✅ Branch ${branchName} updated via API`);
+            return { success: true };
+        }
+
+        // Step 4: Create the new branch ref
+        const createRes = await fetch(
+            `https://api.github.com/repos/${owner}/${repo}/git/refs`,
+            {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    Accept: "application/vnd.github.v3+json",
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    ref: `refs/heads/${branchName}`,
+                    sha,
+                }),
+            }
+        );
+
+        if (!createRes.ok) {
+            const errData = await createRes.json().catch(() => ({}));
+            return { success: false, error: `Failed to create branch: ${errData.message || createRes.status}` };
+        }
+
+        console.log(`[RepoManager] ✅ Branch ${branchName} created via API on ${owner}/${repo}`);
+        return { success: true };
+    } catch (error) {
+        const err = error as Error;
+        console.error(`[RepoManager] ❌ API branch creation failed:`, err.message);
+        return { success: false, error: err.message };
     }
 }
 

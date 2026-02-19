@@ -235,6 +235,7 @@ export type HealingStatus =
   | "fixing"
   | "pushing"
   | "completed"
+  | "partial_success"
   | "failed";
 
 export type BugCategory =

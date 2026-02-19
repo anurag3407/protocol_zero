@@ -265,7 +265,7 @@ export default function SessionDetailPage() {
     }, [logs]);
 
     const isActive = session
-        ? !["completed", "failed"].includes(session.status)
+        ? !["completed", "failed", "partial_success"].includes(session.status)
         : false;
 
     // Detect stale/orphaned sessions (server restarted while healing was running)

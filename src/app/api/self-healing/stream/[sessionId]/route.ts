@@ -52,7 +52,7 @@ export async function GET(
                     // Close stream on terminal events
                     if (
                         event.type === "status" &&
-                        (event.data.status === "completed" || event.data.status === "failed")
+                        (event.data.status === "completed" || event.data.status === "failed" || event.data.status === "partial_success")
                     ) {
                         // Send a done event and close after a brief delay
                         setTimeout(() => {
