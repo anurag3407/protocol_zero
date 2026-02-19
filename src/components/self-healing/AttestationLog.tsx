@@ -176,9 +176,12 @@ export function AttestationLog({ sessionId }: AttestationLogProps) {
 
                         <div className="flex items-center justify-between pt-2 border-t border-white/5">
                             <div className="flex items-center gap-3 text-[10px]">
-                                <span className="text-zinc-500">
+                                <span className={a.testAfterPassed ? "text-emerald-400" : "text-zinc-500"}>
                                     Tests: {a.testBeforePassed ? "✅" : "❌"} → {a.testAfterPassed ? "✅" : "❌"}
                                 </span>
+                                {a.testAfterPassed && (
+                                    <span className="text-emerald-500/60 font-medium">verified</span>
+                                )}
                                 <span className="text-zinc-600 font-mono">
                                     commit: {a.commitSha.slice(0, 7)}
                                 </span>

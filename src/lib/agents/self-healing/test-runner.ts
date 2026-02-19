@@ -315,6 +315,39 @@ function parseErrorLine(line: string, repoDir: string): ParsedError | null {
         };
     }
 
+    // Pytest short format: tests/test_utils.py:10: AssertionError
+    const pytestShortMatch = line.match(/^([^:\s]+\.py):(\d+):\s*(\w*Error|\w*Exception|FAILED)/i);
+    if (pytestShortMatch) {
+        return {
+            filePath: pytestShortMatch[1].replace(repoDir + "/", ""),
+            line: parseInt(pytestShortMatch[2], 10),
+            message: line.trim(),
+            type: classifyError(line),
+        };
+    }
+
+    // Pytest FAILED summary: FAILED tests/test_utils.py::test_name - reason
+    const pytestFailedMatch = line.match(/^FAILED\s+([^:\s]+\.py)::(\S+)/i);
+    if (pytestFailedMatch) {
+        return {
+            filePath: pytestFailedMatch[1].replace(repoDir + "/", ""),
+            line: 1,
+            message: line.trim(),
+            type: classifyError(line),
+        };
+    }
+
+    // Pytest collection error: ERROR collecting tests/test_utils.py
+    const pytestCollectMatch = line.match(/^(?:ERROR|E)\s+.*?([^\s/]+\.py)/i);
+    if (pytestCollectMatch && (line.includes("Error") || line.includes("error") || line.includes("collecting"))) {
+        return {
+            filePath: pytestCollectMatch[1].replace(repoDir + "/", ""),
+            line: 1,
+            message: line.trim(),
+            type: classifyError(line),
+        };
+    }
+
     // JavaScript/TypeScript: src/index.ts(10,5): error TS2304
     const tsMatch = line.match(/([^(\s]+)\((\d+),\d+\):\s*error/);
     if (tsMatch) {

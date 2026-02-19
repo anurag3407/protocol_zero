@@ -56,13 +56,16 @@ RULES:
 5. Ensure your fix does not introduce new bugs.
 6. Preserve ALL existing formatting, indentation, and style.
 7. If a bug cannot be fixed without more context, make your best guess at a safe fix.
+8. NEVER change hardcoded values, config strings, or constants unless they are directly causing a test failure.
+9. NEVER add parameterization, environment variables, or flexibility improvements — only fix what is broken.
+10. NEVER remove or rename existing functions, classes, or exports — only fix bugs inside them.
 
 COMMON FIX PATTERNS:
 - SYNTAX: Fix missing brackets, parentheses, quotes, semicolons
 - IMPORT: Add missing imports, fix import paths
 - TYPE: Add type annotations, fix type mismatches
 - RUNTIME: Add null checks, fix undefined access
-- LOGIC: Fix conditions, comparisons, off-by-one errors
+- LOGIC: Fix conditions, comparisons, off-by-one errors, wrong return values
 - LINTING: Remove unused variables, add missing semicolons
 - DEPENDENCY: Fix package references, update imports
 
@@ -82,7 +85,8 @@ export async function fixBugsInFile(
     onProgress?: {
         onFixApplied?: (result: FixResult) => void;
         onLog?: (message: string) => void;
-    }
+    },
+    customRules?: string,
 ): Promise<FixResult[]> {
     const fullPath = path.join(repoDir, filePath);
     const results: FixResult[] = [];
@@ -129,12 +133,18 @@ export async function fixBugsInFile(
 
     const model = getGeminiModel(0.1);
 
+    // Build system prompt — inject custom rules if provided
+    let systemPrompt = ENGINEER_SYSTEM_PROMPT;
+    if (customRules) {
+        systemPrompt += `\n\nADDITIONAL RULES FROM THE USER (follow these strictly when writing fixes):\n${customRules}`;
+    }
+
     try {
         console.log(`[FixEngineer] Generating fixes for ${filePath} (${bugs.length} bugs)`);
         onProgress?.onLog?.(`🔧 Generating fixes for ${filePath} (${bugs.length} bugs)...`);
 
         const response = await model.invoke([
-            new SystemMessage(ENGINEER_SYSTEM_PROMPT),
+            new SystemMessage(systemPrompt),
             new HumanMessage(prompt),
         ]);
 
@@ -208,7 +218,8 @@ export async function fixAllBugs(
     onProgress?: {
         onFixApplied?: (result: FixResult) => void;
         onLog?: (message: string) => void;
-    }
+    },
+    customRules?: string,
 ): Promise<{
     results: FixResult[];
     filesChanged: number;
@@ -233,7 +244,7 @@ export async function fixAllBugs(
     // Process all files in parallel (each file writes to a different path, so safe)
     const fileFixPromises = Array.from(bugsByFile.entries()).map(
         async ([filePath, fileBugs]) => {
-            const results = await fixBugsInFile(repoDir, filePath, fileBugs, testOutput, onProgress);
+            const results = await fixBugsInFile(repoDir, filePath, fileBugs, testOutput, onProgress, customRules);
             return { filePath, results };
         }
     );

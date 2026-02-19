@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { repoUrl, teamName, leaderName } = body;
+        const { repoUrl, teamName, leaderName, targetBranch, customRules } = body;
 
         if (!repoUrl) {
             return NextResponse.json(
@@ -71,6 +71,9 @@ export async function POST(request: NextRequest) {
         const branchName = getHealingBranchName(teamName, leaderName);
         const now = new Date();
 
+        const resolvedBranch = (typeof targetBranch === "string" && targetBranch.trim()) ? targetBranch.trim() : "main";
+        const resolvedRules = (typeof customRules === "string" && customRules.trim()) ? customRules.trim() : undefined;
+
         const sessionData = {
             id: sessionId,
             userId,
@@ -78,6 +81,8 @@ export async function POST(request: NextRequest) {
             repoOwner,
             repoName,
             branchName,
+            targetBranch: resolvedBranch,
+            ...(resolvedRules ? { customRules: resolvedRules } : {}),
             teamName,
             leaderName,
             status: "queued" as const,
@@ -104,6 +109,8 @@ export async function POST(request: NextRequest) {
             userId,
             teamName,
             leaderName,
+            targetBranch: resolvedBranch,
+            customRules: resolvedRules,
         }).catch((error) => {
             console.error("[Self-Healing] Background loop error:", error);
         });

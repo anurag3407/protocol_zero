@@ -117,7 +117,7 @@ export function scanFileTree(
 // AI BUG SCANNING
 // ============================================================================
 
-const SCANNER_SYSTEM_PROMPT = `You are an elite code bug scanner. Your job is to find ALL bugs in the given code files.
+const SCANNER_SYSTEM_PROMPT = `You are an elite code bug scanner. Your job is to find ALL genuine bugs in the given code files.
 
 You must output a valid JSON array of bug objects. Each bug must have:
 - "category": One of "SYNTAX", "LINTING", "RUNTIME", "LOGIC", "IMPORT", "TYPE", "DEPENDENCY"
@@ -127,15 +127,23 @@ You must output a valid JSON array of bug objects. Each bug must have:
 - "severity": One of "critical", "high", "medium", "low"
 
 Focus on these bug types:
-1. SYNTAX: Invalid syntax, missing brackets, wrong indentation
-2. LINTING: Unused variables, missing semicolons, console.logs in production
-3. RUNTIME: Null references, undefined access, division by zero
-4. LOGIC: Wrong conditions, off-by-one errors, incorrect comparisons
+1. SYNTAX: Invalid syntax, missing brackets, wrong indentation, unclosed strings
+2. LINTING: Unused variables, missing semicolons, unreachable code
+3. RUNTIME: Null references, undefined access, division by zero, unhandled exceptions
+4. LOGIC: Wrong conditions, off-by-one errors, incorrect comparisons, wrong return values, broken control flow
 5. IMPORT: Missing imports, wrong import paths, circular dependencies
-6. TYPE: Type mismatches, wrong function signatures
+6. TYPE: Type mismatches, wrong function signatures, wrong argument counts
 7. DEPENDENCY: Missing packages, version conflicts
 
-Be thorough but precise. Only report real bugs, not style preferences.
+CRITICAL RULES — DO NOT REPORT:
+- Hardcoded values, magic numbers, or config strings — these are DESIGN CHOICES, not bugs
+- Missing parameterization or lack of flexibility — not a bug unless it causes test failures
+- Style preferences, naming conventions, or code organization
+- Missing documentation or comments
+- Performance suggestions that don't cause failures
+- "Could be improved" observations — only report things that are BROKEN or will cause errors
+
+Only report bugs that will cause test failures, crashes, wrong output, or runtime errors.
 Output ONLY a JSON array, no other text.`;
 
 /**
@@ -147,7 +155,8 @@ export async function scanForBugs(
     onProgress?: {
         onBugFound?: (bug: HealingBug) => void;
         onLog?: (message: string) => void;
-    }
+    },
+    customRules?: string,
 ): Promise<HealingBug[]> {
     const log = (msg: string) => {
         console.log(msg);
@@ -183,6 +192,12 @@ export async function scanForBugs(
     const model = getGeminiModel(0);
 
     try {
+        // Build system prompt — inject custom rules if provided
+        let systemPrompt = SCANNER_SYSTEM_PROMPT;
+        if (customRules) {
+            systemPrompt += `\n\nADDITIONAL RULES FROM THE USER (follow these strictly):\n${customRules}`;
+        }
+
         // Process all batches in parallel for speed
         const batchSize = 5;
         const allBugs: HealingBug[] = [];
@@ -198,7 +213,7 @@ export async function scanForBugs(
                 (async () => {
                     const prompt = `Scan these code files for bugs and return a JSON array:\n\n${batch.join("\n\n")}${testErrorContext}`;
                     const response = await model.invoke([
-                        new SystemMessage(SCANNER_SYSTEM_PROMPT),
+                        new SystemMessage(systemPrompt),
                         new HumanMessage(prompt),
                     ]);
 

@@ -126,60 +126,81 @@ export async function recordFixAttestation(
 
     console.log(`[Attestation] Recording on-chain: ${input.bugCategory} fix in ${input.filePath}:${input.line}`);
 
-    try {
-        const signer = getSigner();
-        const contract = getContract(signer);
+    const MAX_RETRIES = 2;
 
-        // Truncate long strings to avoid excessive gas costs
-        const errorMsg = input.errorMessage.slice(0, 500);
-        const fixDesc = input.fixDescription.slice(0, 500);
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            const signer = getSigner();
+            const contract = getContract(signer);
 
-        const tx = await contract.recordAttestation(
-            input.sessionId,
-            input.bugCategory,
-            input.filePath,
-            input.line,
-            errorMsg,
-            fixDesc,
-            input.testBeforePassed,
-            input.testAfterPassed,
-            input.commitSha
-        );
+            // Truncate long strings to avoid excessive gas costs
+            const errorMsg = (input.errorMessage || "").slice(0, 500);
+            const fixDesc = (input.fixDescription || "").slice(0, 500);
+            const commitSha = (input.commitSha || "unknown").slice(0, 64);
+            const filePath = (input.filePath || "unknown").slice(0, 256);
+            const sessionId = (input.sessionId || "unknown").slice(0, 128);
 
-        console.log(`[Attestation] ⏳ Tx submitted: ${tx.hash}`);
-        const receipt = await tx.wait();
-        console.log(`[Attestation] ✅ Tx confirmed in block ${receipt.blockNumber}`);
+            const tx = await contract.recordAttestation(
+                sessionId,
+                input.bugCategory || "RUNTIME",
+                filePath,
+                input.line || 0,
+                errorMsg,
+                fixDesc,
+                input.testBeforePassed ?? false,
+                input.testAfterPassed ?? false,
+                commitSha
+            );
 
-        // Parse event to get attestation ID
-        let attestationId: number | undefined;
-        for (const log of receipt.logs) {
-            try {
-                const parsed = contract.interface.parseLog({
-                    topics: log.topics as string[],
-                    data: log.data,
-                });
-                if (parsed && parsed.name === "AttestationRecorded") {
-                    attestationId = Number(parsed.args.id);
+            console.log(`[Attestation] ⏳ Tx submitted: ${tx.hash}`);
+            const receipt = await tx.wait();
+            console.log(`[Attestation] ✅ Tx confirmed in block ${receipt.blockNumber}`);
+
+            // Parse event to get attestation ID
+            let attestationId: number | undefined;
+            for (const log of receipt.logs) {
+                try {
+                    const parsed = contract.interface.parseLog({
+                        topics: log.topics as string[],
+                        data: log.data,
+                    });
+                    if (parsed && parsed.name === "AttestationRecorded") {
+                        attestationId = Number(parsed.args.id);
+                    }
+                } catch {
+                    // Not our event
                 }
-            } catch {
-                // Not our event
             }
-        }
 
-        return {
-            success: true,
-            attestationId,
-            txHash: tx.hash,
-            etherscanUrl: `${ETHERSCAN_BASE}/tx/${tx.hash}`,
-        };
-    } catch (error) {
-        const err = error as Error;
-        console.error(`[Attestation] Failed:`, err.message);
-        return {
-            success: false,
-            error: err.message,
-        };
+            return {
+                success: true,
+                attestationId,
+                txHash: tx.hash,
+                etherscanUrl: `${ETHERSCAN_BASE}/tx/${tx.hash}`,
+            };
+        } catch (error) {
+            const err = error as Error;
+            const isRetryable = err.message?.includes("nonce") || 
+                                err.message?.includes("timeout") || 
+                                err.message?.includes("ETIMEDOUT") ||
+                                err.message?.includes("replacement fee too low") ||
+                                err.message?.includes("already known");
+            
+            if (attempt < MAX_RETRIES && isRetryable) {
+                console.warn(`[Attestation] Attempt ${attempt} failed (retryable): ${err.message}. Retrying in 2s...`);
+                await new Promise((r) => setTimeout(r, 2000));
+                continue;
+            }
+
+            console.error(`[Attestation] Failed after ${attempt} attempt(s):`, err.message);
+            return {
+                success: false,
+                error: err.message,
+            };
+        }
     }
+
+    return { success: false, error: "Max retries exhausted" };
 }
 
 // ============================================================================

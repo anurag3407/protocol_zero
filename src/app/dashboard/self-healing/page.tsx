@@ -68,13 +68,13 @@ export default function SelfHealingPage() {
     }
   }, [isSignedIn, fetchSessions]);
 
-  const handleSubmit = async (repoUrl: string, teamName: string, leaderName: string) => {
+  const handleSubmit = async (repoUrl: string, teamName: string, leaderName: string, targetBranch: string, customRules?: string) => {
     setSubmitting(true);
     try {
       const res = await fetch("/api/self-healing/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repoUrl, teamName, leaderName }),
+        body: JSON.stringify({ repoUrl, teamName, leaderName, targetBranch, customRules }),
       });
 
       const data = await res.json();
