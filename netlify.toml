@@ -4,4 +4,3 @@
 
 [build.environment]
   NEXT_PRIVATE_STANDALONE = "true"
-  NETLIFY_SKIP_SECRETS_SCAN = "true"
