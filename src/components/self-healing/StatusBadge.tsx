@@ -55,6 +55,12 @@ const statusConfig: Record<
         bgColor: "bg-emerald-400/20",
         pulse: false,
     },
+    partial_success: {
+        label: "Partial Fix",
+        color: "text-amber-400",
+        bgColor: "bg-amber-400/20",
+        pulse: false,
+    },
     failed: {
         label: "Failed",
         color: "text-red-400",

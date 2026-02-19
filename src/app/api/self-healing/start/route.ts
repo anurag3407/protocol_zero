@@ -28,11 +28,18 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { repoUrl } = body;
+        const { repoUrl, teamName, leaderName } = body;
 
         if (!repoUrl) {
             return NextResponse.json(
                 { error: "Missing required field: repoUrl" },
+                { status: 400 }
+            );
+        }
+
+        if (!teamName || !leaderName) {
+            return NextResponse.json(
+                { error: "Missing required fields: teamName and leaderName" },
                 { status: 400 }
             );
         }
@@ -61,7 +68,7 @@ export async function POST(request: NextRequest) {
 
         // Create session
         const sessionId = uuidv4();
-        const branchName = getHealingBranchName();
+        const branchName = getHealingBranchName(teamName, leaderName);
         const now = new Date();
 
         const sessionData = {
@@ -71,6 +78,8 @@ export async function POST(request: NextRequest) {
             repoOwner,
             repoName,
             branchName,
+            teamName,
+            leaderName,
             status: "queued" as const,
             currentAttempt: 0,
             maxAttempts: 5,
@@ -89,11 +98,12 @@ export async function POST(request: NextRequest) {
         }
 
         // Start the healing loop in the background (non-blocking)
-        // No githubToken needed — the orchestrator uses GITHUB_BOT_TOKEN from .env
         runHealingLoop({
             sessionId,
             repoUrl,
             userId,
+            teamName,
+            leaderName,
         }).catch((error) => {
             console.error("[Self-Healing] Background loop error:", error);
         });

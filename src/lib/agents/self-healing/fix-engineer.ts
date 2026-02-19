@@ -230,19 +230,23 @@ export async function fixAllBugs(
     let filesChanged = 0;
     let bugsFixed = 0;
 
-    // Process files sequentially to avoid rate limits
-    for (const [filePath, fileBugs] of bugsByFile.entries()) {
-        const results = await fixBugsInFile(repoDir, filePath, fileBugs, testOutput, onProgress);
-        allResults.push(...results);
+    // Process all files in parallel (each file writes to a different path, so safe)
+    const fileFixPromises = Array.from(bugsByFile.entries()).map(
+        async ([filePath, fileBugs]) => {
+            const results = await fixBugsInFile(repoDir, filePath, fileBugs, testOutput, onProgress);
+            return { filePath, results };
+        }
+    );
 
+    const fileResults = await Promise.all(fileFixPromises);
+
+    for (const { results } of fileResults) {
+        allResults.push(...results);
         const applied = results.filter((r) => r.applied);
         if (applied.length > 0) {
             filesChanged++;
             bugsFixed += applied.length;
         }
-
-        // Small delay between files to avoid rate limits
-        await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     console.log(

@@ -183,57 +183,63 @@ export async function scanForBugs(
     const model = getGeminiModel(0);
 
     try {
-        // Split into batches if too many files
+        // Process all batches in parallel for speed
         const batchSize = 5;
         const allBugs: HealingBug[] = [];
+        const totalBatches = Math.ceil(fileContexts.length / batchSize);
+        const batchPromises: Promise<void>[] = [];
 
         for (let i = 0; i < fileContexts.length; i += batchSize) {
             const batch = fileContexts.slice(i, i + batchSize);
             const batchNum = Math.floor(i / batchSize) + 1;
-            const totalBatches = Math.ceil(fileContexts.length / batchSize);
-            log(`[BugScanner] Scanning batch ${batchNum}/${totalBatches}...`);
-            const prompt = `Scan these code files for bugs and return a JSON array:\n\n${batch.join("\n\n")}${testErrorContext}`;
+            log(`[BugScanner] Launching scan batch ${batchNum}/${totalBatches}...`);
 
-            const response = await model.invoke([
-                new SystemMessage(SCANNER_SYSTEM_PROMPT),
-                new HumanMessage(prompt),
-            ]);
+            batchPromises.push(
+                (async () => {
+                    const prompt = `Scan these code files for bugs and return a JSON array:\n\n${batch.join("\n\n")}${testErrorContext}`;
+                    const response = await model.invoke([
+                        new SystemMessage(SCANNER_SYSTEM_PROMPT),
+                        new HumanMessage(prompt),
+                    ]);
 
-            const content = typeof response.content === "string"
-                ? response.content
-                : JSON.stringify(response.content);
+                    const content = typeof response.content === "string"
+                        ? response.content
+                        : JSON.stringify(response.content);
 
-            // Extract JSON from response
-            const jsonMatch = content.match(/\[[\s\S]*\]/);
-            if (jsonMatch) {
-                try {
-                    const bugs = JSON.parse(jsonMatch[0]) as Array<{
-                        category: BugCategory;
-                        filePath: string;
-                        line: number;
-                        message: string;
-                        severity: IssueSeverity;
-                    }>;
+                    const jsonMatch = content.match(/\[[\s\S]*\]/);
+                    if (jsonMatch) {
+                        try {
+                            const bugs = JSON.parse(jsonMatch[0]) as Array<{
+                                category: BugCategory;
+                                filePath: string;
+                                line: number;
+                                message: string;
+                                severity: IssueSeverity;
+                            }>;
 
-                    for (const bug of bugs) {
-                        const healingBug: HealingBug = {
-                            id: uuidv4(),
-                            category: bug.category || "RUNTIME",
-                            filePath: bug.filePath,
-                            line: bug.line || 1,
-                            message: bug.message,
-                            severity: bug.severity || "medium",
-                            fixed: false,
-                        };
-                        allBugs.push(healingBug);
-                        onProgress?.onBugFound?.(healingBug);
-                        log(`🐛 Found: ${bug.category} in ${bug.filePath}:${bug.line}`);
+                            for (const bug of bugs) {
+                                const healingBug: HealingBug = {
+                                    id: uuidv4(),
+                                    category: bug.category || "RUNTIME",
+                                    filePath: bug.filePath,
+                                    line: bug.line || 1,
+                                    message: bug.message,
+                                    severity: bug.severity || "medium",
+                                    fixed: false,
+                                };
+                                allBugs.push(healingBug);
+                                onProgress?.onBugFound?.(healingBug);
+                                log(`🐛 Found: ${bug.category} in ${bug.filePath}:${bug.line}`);
+                            }
+                        } catch (parseError) {
+                            console.warn(`[BugScanner] Failed to parse batch ${batchNum}:`, parseError);
+                        }
                     }
-                } catch (parseError) {
-                    console.warn(`[BugScanner] Failed to parse batch ${i}:`, parseError);
-                }
-            }
+                })()
+            );
         }
+
+        await Promise.all(batchPromises);
 
         // Also add bugs from test errors that weren't found by AI
         if (testErrors) {
