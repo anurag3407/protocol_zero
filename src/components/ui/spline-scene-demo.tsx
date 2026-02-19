@@ -19,8 +19,9 @@ export function SplineSceneDemo() {
                         AI Agents at Work
                     </h1>
                     <p className="mt-4 text-neutral-300 max-w-lg">
-                        Autonomous AI agents that analyze code, generate pitch decks, manage equity,
-                        and query databases. Let your AI co-founders handle the heavy lifting.
+                        Code Police catches bugs and vulnerabilities in every commit. Self-Healing
+                        fixes them automatically and opens a PR. Every fix is recorded on-chain
+                        for full auditability.
                     </p>
                 </div>
 

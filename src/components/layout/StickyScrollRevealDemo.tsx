@@ -319,20 +319,20 @@ const content = [
 
 export default function StickyScrollRevealDemo() {
   return (
-    <section className="w-full py-20 px-4 bg-black">
-      <div className="max-w-7xl mx-auto">
-        {/* Section Header - Minimal */}
-        <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-5xl font-bold text-white mb-6">
-            Your Complete Code Review Toolkit
-          </h2>
-          <p className="text-lg text-zinc-400 max-w-3xl mx-auto leading-relaxed">
-            An autonomous AI agent working 24/7 to review, protect, and improve your codebase.
-            From security scanning to auto-fix PRs — we&apos;ve got you covered.
-          </p>
-        </div>
+    <section className="w-full py-20 bg-black">
+      {/* Section Header - Minimal */}
+      <div className="text-center mb-16 px-4">
+        <h2 className="text-3xl sm:text-5xl font-bold text-white mb-6 tracking-tight" style={{ fontFamily: 'var(--font-syne), var(--font-space-grotesk), sans-serif' }}>
+          Your Complete Code Review Toolkit
+        </h2>
+        <p className="text-lg text-zinc-400 max-w-3xl mx-auto leading-relaxed" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
+          An autonomous AI agent working <span className="text-zinc-200" style={{ fontFamily: 'var(--font-jetbrains), monospace' }}>24/7</span> to review, protect, and improve your codebase.
+          From security scanning to auto-fix PRs — we&apos;ve got you covered.
+        </p>
+      </div>
 
-        <StickyScroll content={content} contentClassName="h-[25rem] w-[23rem]" />
+      <div className="max-w-7xl mx-auto px-4 lg:px-8">
+        <StickyScroll content={content} contentClassName="h-[28rem] w-[26rem]" />
       </div>
     </section>
   );

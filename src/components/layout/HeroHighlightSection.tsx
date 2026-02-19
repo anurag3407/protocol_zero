@@ -44,6 +44,7 @@ export default function HeroHighlightSection({
           delay: animationDelay,
         }}
         className={`text-2xl px-4 md:text-4xl lg:text-5xl font-bold text-zinc-800 dark:text-white max-w-4xl leading-relaxed lg:leading-snug text-center mx-auto ${headingClassName ?? ""}`}
+        style={{ fontFamily: 'var(--font-syne), var(--font-space-grotesk), sans-serif' }}
       >
         {text}{" "}
         <Highlight className="text-zinc-900 dark:text-white">
