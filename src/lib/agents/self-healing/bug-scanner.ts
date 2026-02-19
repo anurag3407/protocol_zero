@@ -49,7 +49,7 @@ const EXCLUDED_DIRS = new Set([
 ]);
 
 const MAX_FILE_SIZE = 50000; // 50KB max per file
-const MAX_FILES = 30; // Limit files to scan
+const MAX_FILES = 15; // Limit files to scan for speed
 
 interface ScannedFile {
     path: string;
@@ -184,7 +184,7 @@ export async function scanForBugs(
 
     try {
         // Split into batches if too many files
-        const batchSize = 10;
+        const batchSize = 5;
         const allBugs: HealingBug[] = [];
 
         for (let i = 0; i < fileContexts.length; i += batchSize) {
