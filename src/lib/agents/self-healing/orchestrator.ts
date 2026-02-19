@@ -48,6 +48,7 @@ import type {
     HealingStatus,
 } from "@/types";
 import { getAdminDb } from "@/lib/firebase/admin";
+import { recordFixAttestation, isAttestationEnabled } from "@/lib/blockchain/attestation";
 
 // ============================================================================
 // CONSTANTS
@@ -304,6 +305,30 @@ export async function runHealingLoop(input: OrchestratorInput): Promise<void> {
             if (commitSha) {
                 pushBranch(repoDir, branchName);
                 emitLog(sessionId, `✅ Pushed commit ${commitSha.slice(0, 7)}: [AI-AGENT] ${commitMessage}`);
+
+                // ── ON-CHAIN ATTESTATION ──
+                if (isAttestationEnabled()) {
+                    emitLog(sessionId, `⛓️ Recording attestations on-chain...`);
+                    for (const result of fixResult.results) {
+                        if (result.applied) {
+                            const matchingBug = allBugs.find((b) => b.id === result.bugId);
+                            const attestResult = await recordFixAttestation({
+                                sessionId,
+                                bugCategory: matchingBug?.category || "UNKNOWN",
+                                filePath: result.filePath,
+                                line: matchingBug?.line || 0,
+                                errorMessage: matchingBug?.message || "Unknown error",
+                                fixDescription: result.description,
+                                testBeforePassed: false,
+                                testAfterPassed: false, // will know after next test
+                                commitSha: commitSha,
+                            });
+                            if (attestResult.success) {
+                                emitLog(sessionId, `⛓️ Attestation #${attestResult.attestationId} recorded → ${attestResult.etherscanUrl}`);
+                            }
+                        }
+                    }
+                }
             } else {
                 emitLog(sessionId, `⚠️ No file changes to commit`);
             }

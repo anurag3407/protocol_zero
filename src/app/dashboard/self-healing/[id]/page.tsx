@@ -24,6 +24,7 @@ import { StatusBadge } from "@/components/self-healing/StatusBadge";
 import { HealingTimeline } from "@/components/self-healing/HealingTimeline";
 import { BugTable } from "@/components/self-healing/BugTable";
 import { ScoreBreakdown } from "@/components/self-healing/ScoreBreakdown";
+import { AttestationLog } from "@/components/self-healing/AttestationLog";
 import type {
     HealingStatus,
     HealingBug,
@@ -57,7 +58,7 @@ export default function SessionDetailPage() {
     const [session, setSession] = useState<SessionDetail | null>(null);
     const [loading, setLoading] = useState(true);
     const [logs, setLogs] = useState<string[]>([]);
-    const [activeTab, setActiveTab] = useState<"timeline" | "bugs" | "score" | "logs">(
+    const [activeTab, setActiveTab] = useState<"timeline" | "bugs" | "score" | "attestations" | "logs">(
         "timeline"
     );
     const logsEndRef = useRef<HTMLDivElement>(null);
@@ -330,6 +331,7 @@ export default function SessionDetailPage() {
                     { key: "timeline" as const, label: "Timeline", count: session.attempts.length },
                     { key: "bugs" as const, label: "Bugs", count: session.bugs.length },
                     { key: "score" as const, label: "Score", count: null },
+                    { key: "attestations" as const, label: "⛓️ On-Chain", count: null },
                     { key: "logs" as const, label: "Logs", count: logs.length },
                 ].map((tab) => (
                     <button
@@ -375,6 +377,10 @@ export default function SessionDetailPage() {
                             </p>
                         </div>
                     )
+                )}
+
+                {activeTab === "attestations" && (
+                    <AttestationLog sessionId={session.id} />
                 )}
 
                 {activeTab === "logs" && (
