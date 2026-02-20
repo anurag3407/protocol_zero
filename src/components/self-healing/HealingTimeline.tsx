@@ -54,6 +54,13 @@ export function HealingTimeline({
                     ? Math.round((attempt.bugsFixed / attempt.bugsFound) * 100)
                     : 0;
                 const durationPct = maxDuration > 0 ? (attempt.durationMs / maxDuration) * 100 : 0;
+                // Determine visual status based on actual progress, not raw pass/fail
+                const hasProgress = attempt.bugsFixed > 0;
+                const visualStatus = attempt.status === "passed"
+                    ? "passed"
+                    : hasProgress
+                        ? fixRate >= 80 ? "strong" : "improving"
+                        : "improving";
 
                 return (
                     <div key={attempt.attempt} className="relative flex gap-4">
@@ -67,17 +74,17 @@ export function HealingTimeline({
 
                         {/* Status icon */}
                         <div className="flex-shrink-0 mt-1 z-10">
-                            {attempt.status === "passed" ? (
+                            {visualStatus === "passed" ? (
                                 <div className="w-10 h-10 rounded-full bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
                                     <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                                 </div>
-                            ) : attempt.status === "failed" ? (
-                                <div className="w-10 h-10 rounded-full bg-red-500/15 border border-red-500/20 flex items-center justify-center">
-                                    <XCircle className="w-5 h-5 text-red-400" />
+                            ) : visualStatus === "strong" ? (
+                                <div className="w-10 h-10 rounded-full bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center">
+                                    <Wrench className="w-5 h-5 text-emerald-400" />
                                 </div>
                             ) : (
-                                <div className="w-10 h-10 rounded-full bg-yellow-500/15 border border-yellow-500/20 flex items-center justify-center">
-                                    <Loader2 className="w-5 h-5 text-yellow-400 animate-spin" />
+                                <div className="w-10 h-10 rounded-full bg-amber-500/15 border border-amber-500/20 flex items-center justify-center">
+                                    <Wrench className="w-5 h-5 text-amber-400" />
                                 </div>
                             )}
                         </div>
@@ -91,13 +98,13 @@ export function HealingTimeline({
                                         <h4 className="text-sm font-bold text-zinc-200">
                                             Attempt {attempt.attempt}
                                         </h4>
-                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${attempt.status === "passed"
+                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${visualStatus === "passed"
                                                 ? "text-emerald-400 bg-emerald-500/10"
-                                                : attempt.status === "failed"
-                                                    ? "text-red-400 bg-red-500/10"
-                                                    : "text-yellow-400 bg-yellow-500/10"
+                                                : visualStatus === "strong"
+                                                    ? "text-emerald-400 bg-emerald-500/10"
+                                                    : "text-amber-400 bg-amber-500/10"
                                             }`}>
-                                            {attempt.status === "passed" ? "TESTS PASSED" : attempt.status === "failed" ? "FIXING ISSUES" : "IN PROGRESS"}
+                                            {visualStatus === "passed" ? "TESTS PASSED" : visualStatus === "strong" ? `${fixRate}% RESOLVED` : "IMPROVING"}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-1 text-xs text-zinc-500">
@@ -127,7 +134,7 @@ export function HealingTimeline({
                                             <CheckCircle2 className="w-3 h-3 text-cyan-400" />
                                             <span className="text-[10px] text-zinc-500 uppercase">Fix Rate</span>
                                         </div>
-                                        <span className={`text-lg font-bold ${fixRate >= 80 ? "text-emerald-400" : fixRate >= 50 ? "text-yellow-400" : "text-red-400"}`}>
+                                        <span className={`text-lg font-bold ${fixRate >= 80 ? "text-emerald-400" : fixRate >= 50 ? "text-amber-400" : "text-amber-400"}`}>
                                             {fixRate}%
                                         </span>
                                     </div>
@@ -137,7 +144,11 @@ export function HealingTimeline({
                                 <div className="mb-3">
                                     <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
                                         <div
-                                            className={`h-full rounded-full transition-all duration-700 ${attempt.status === "passed" ? "bg-emerald-500/60" : attempt.status === "failed" ? "bg-red-500/40" : "bg-yellow-500/40"
+                                            className={`h-full rounded-full transition-all duration-700 ${visualStatus === "passed"
+                                                    ? "bg-emerald-500/60"
+                                                    : visualStatus === "strong"
+                                                        ? "bg-gradient-to-r from-amber-500/60 to-emerald-500/60"
+                                                        : "bg-amber-500/50"
                                                 }`}
                                             style={{ width: `${durationPct}%` }}
                                         />

@@ -21,6 +21,7 @@ import {
     Terminal,
     AlertTriangle,
     XCircle,
+    Download,
 } from "lucide-react";
 import { StatusBadge } from "@/components/self-healing/StatusBadge";
 import { HealingTimeline } from "@/components/self-healing/HealingTimeline";
@@ -398,6 +399,71 @@ export default function SessionDetailPage() {
                 </a>
             )}
 
+            {/* Download Result JSON */}
+            {!isActive && session.score && (
+                <button
+                    onClick={() => {
+                        const result = {
+                            sessionId: session.id,
+                            repository: `${session.repoOwner}/${session.repoName}`,
+                            branch: session.branchName,
+                            status: session.status,
+                            startedAt: session.startedAt,
+                            completedAt: session.completedAt || new Date().toISOString(),
+                            summary: {
+                                totalBugsFound: session.score!.totalBugs,
+                                bugsFixed: session.score!.bugsFixed,
+                                fixRate: session.score!.totalBugs > 0
+                                    ? `${Math.round((session.score!.bugsFixed / session.score!.totalBugs) * 100)}%`
+                                    : "N/A",
+                                testsPassed: session.score!.testsPassed,
+                                attemptsUsed: session.score!.attempts,
+                                totalCommits: session.score!.totalCommits,
+                                durationSeconds: session.score!.timeSeconds,
+                                finalScore: session.score!.finalScore,
+                            },
+                            pullRequest: session.prUrl
+                                ? { url: session.prUrl, number: session.prNumber || null }
+                                : null,
+                            bugs: session.bugs.map((b) => ({
+                                category: b.category,
+                                filePath: b.filePath,
+                                line: b.line,
+                                message: b.message,
+                                severity: b.severity,
+                                fixed: b.fixed,
+                                fixedAtAttempt: b.fixedAtAttempt || null,
+                            })),
+                            attempts: session.attempts.map((a) => ({
+                                attempt: a.attempt,
+                                status: a.status,
+                                bugsFound: a.bugsFound,
+                                bugsFixed: a.bugsFixed,
+                                durationMs: a.durationMs,
+                                commitSha: a.commitSha || null,
+                            })),
+                            score: session.score,
+                        };
+
+                        const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement("a");
+                        a.href = url;
+                        a.download = `result-${session.repoName}-${session.id.slice(0, 8)}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }}
+                    className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-violet-500/10 border border-violet-500/20 rounded-xl hover:bg-violet-500/20 transition-colors group"
+                >
+                    <Download className="w-4 h-4 text-violet-400 group-hover:text-violet-300 transition-colors" />
+                    <span className="text-sm font-medium text-violet-300 group-hover:text-violet-200 transition-colors">
+                        Download Result JSON
+                    </span>
+                </button>
+            )}
+
             {/* Stats Overview */}
             {session.bugs.length > 0 && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -548,7 +614,7 @@ export default function SessionDetailPage() {
 
                 {activeTab === "score" && (
                     session.score ? (
-                        <ScoreBreakdown score={session.score} />
+                        <ScoreBreakdown score={session.score} hasPR={!!session.prUrl} />
                     ) : (
                         <div className="text-center py-12">
                             <p className="text-zinc-500 text-sm">

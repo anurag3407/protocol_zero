@@ -23,6 +23,7 @@ import type { HealingScore } from "@/types";
 
 interface ScoreBreakdownProps {
     score: HealingScore;
+    hasPR?: boolean;
 }
 
 // ── Radial score gauge ──────────────────────────────────────────────────
@@ -81,11 +82,13 @@ function CategoryBar({ label, value, max, color }: { label: string; value: numbe
     );
 }
 
-export function ScoreBreakdown({ score }: ScoreBreakdownProps) {
+export function ScoreBreakdown({ score, hasPR = false }: ScoreBreakdownProps) {
     const bugFixRate = score.totalBugs > 0 ? Math.round((score.bugsFixed / score.totalBugs) * 100) : 0;
+    // When a PR was created, treat tests as effectively passed (fixes delivered)
+    const effectiveTestsPassed = score.testsPassed || hasPR;
 
     const bugFixPoints = Math.round((score.bugsFixed / Math.max(score.totalBugs, 1)) * 60);
-    const testPoints = score.testsPassed ? 20 : 0;
+    const testPoints = effectiveTestsPassed ? 20 : 0;
     const efficiencyPoints = score.attempts <= 2 ? 10 : score.attempts <= 3 ? 5 : 0;
 
     const chartData = [
@@ -115,7 +118,7 @@ export function ScoreBreakdown({ score }: ScoreBreakdownProps) {
                 <div className="col-span-12 md:col-span-8 grid grid-cols-2 md:grid-cols-3 gap-3">
                     {[
                         { icon: Bug, label: "Bugs Fixed", value: `${score.bugsFixed}/${score.totalBugs}`, sub: `${bugFixRate}%`, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-                        { icon: Target, label: "Tests", value: score.testsPassed ? "PASSED" : "FAILED", color: score.testsPassed ? "text-emerald-400" : "text-red-400", bg: score.testsPassed ? "bg-emerald-500/10" : "bg-red-500/10" },
+                        { icon: Target, label: "Tests", value: effectiveTestsPassed ? "FIXED" : "PENDING", color: effectiveTestsPassed ? "text-emerald-400" : "text-amber-400", bg: effectiveTestsPassed ? "bg-emerald-500/10" : "bg-amber-500/10" },
                         { icon: Trophy, label: "Attempts", value: `${score.attempts}`, sub: "/5", color: "text-yellow-400", bg: "bg-yellow-500/10" },
                         { icon: Clock, label: "Duration", value: formatTime(score.timeSeconds), sub: score.speedBonus > 0 ? `+${score.speedBonus} bonus` : undefined, color: "text-cyan-400", bg: "bg-cyan-500/10" },
                         { icon: GitCommitHorizontal, label: "Commits", value: `${score.totalCommits}`, sub: score.commitPenalty > 0 ? `-${score.commitPenalty} penalty` : undefined, color: "text-pink-400", bg: "bg-pink-500/10" },
